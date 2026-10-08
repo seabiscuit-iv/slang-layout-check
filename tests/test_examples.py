@@ -122,3 +122,27 @@ def test_no_annotated_structs_is_ok_with_warning(tmp_path):
     r = run_cli("--header", str(h))
     assert r.returncode == 0
     assert "no structs annotated" in r.stdout
+
+
+@needs_libclang
+@needs_slangc
+def test_same_struct_name_in_several_shaders(tmp_path):
+    (tmp_path / "mesh").mkdir()
+    (tmp_path / "sky").mkdir()
+    entry = '[shader("vertex")] float4 main(uint id : SV_VertexID) : SV_Position { return 0; }\n'
+    (tmp_path / "mesh" / "mesh.slang").write_text("struct VertexOutput { float4 pos; float4 uv; };\n" + entry)
+    (tmp_path / "sky" / "sky.slang").write_text("struct VertexOutput { float4 pos; float3 dir; float pad; };\n" + entry)
+    h = tmp_path / "vs.h"
+    h.write_text(
+        '#include <slang_check.h>\n'
+        'struct [[slang_check("mesh/mesh.slang:VertexOutput")]] MeshOut { float pos[4]; float uv[4]; };\n'
+        'struct [[slang_check("sky.slang:VertexOutput")]] SkyOut { float pos[4]; float dir[3]; float pad; };\n')
+    shaders = [str(tmp_path / "mesh" / "mesh.slang"), str(tmp_path / "sky" / "sky.slang")]
+    r = run_cli("--header", str(h), "--shader", *shaders, *SPIRV)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    h.write_text('#include <slang_check.h>\nstruct [[slang_check("VertexOutput")]] Out { float pos[4]; };\n')
+    r = run_cli("--header", str(h), "--shader", *shaders, *SPIRV)
+    assert r.returncode == 1
+    assert ("Slang struct 'VertexOutput' is defined in several shaders (mesh.slang, sky.slang); "
+            "qualify it, e.g. [[slang_check(\"mesh.slang:VertexOutput\")]]") in r.stdout

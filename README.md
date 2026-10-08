@@ -98,6 +98,14 @@ SLANG_STRUCT("ShaderName", CppName) { ... };            // macro form
   Clang (`-Wall -Wextra -Werror`). The examples build with these flags.
 * Only annotated structs are checked. The name is the Slang struct to compare
   against; namespaces on the C++ side are fine (`gfx::Particle`).
+* **Same struct name in several shaders** (e.g. a `VertexOutput` in every
+  vertex shader): qualify the name with the shader file,
+  `[[slang_check("shaders/mesh.slang:VertexOutput")]]`. The path matches any
+  `--shader`/`SHADERS` file ending in it (`mesh.slang` is enough if it is
+  unique), or a file relative to the header. An unqualified name is looked up
+  in every shader; if more than one shader defines it, that is an error that
+  suggests the qualified form. Each shader is compiled on its own wrapper, so
+  unrelated shaders never clash.
 * **Padding fields:** C++ often needs explicit padding that Slang adds
   implicitly. A field that exists on only one side is allowed if its name
   matches `^_*(pad|padding|reserved|unused)[_0-9]*$` (case-insensitive, e.g.

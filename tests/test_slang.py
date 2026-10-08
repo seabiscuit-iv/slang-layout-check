@@ -113,3 +113,33 @@ def test_depfile_roundtrip(tmp_path):
 def test_split_flag_args():
     assert slc._split_flag_args(["--cxx-flag", "-std=c++20", "--slang-flag", "-O0", "-I", "x"]) == [
         "--cxx-flag=-std=c++20", "--slang-flag=-O0", "-I", "x"]
+
+
+def test_split_slang_ref():
+    assert slc.split_slang_ref("VertexOutput") == (None, "VertexOutput")
+    assert slc.split_slang_ref("ns::Foo") == (None, "ns::Foo")
+    assert slc.split_slang_ref("shaders/mesh.slang:VertexOutput") == ("shaders/mesh.slang", "VertexOutput")
+    assert slc.split_slang_ref("mesh.slang:ns::Foo") == ("mesh.slang", "ns::Foo")
+    assert slc.split_slang_ref("C:/x/mesh.slang:Foo") == ("C:/x/mesh.slang", "Foo")
+
+
+def test_find_qualified_shader(tmp_path):
+    mesh = tmp_path / "shaders" / "mesh.slang"
+    other = tmp_path / "shaders" / "othermesh.slang"
+    mesh.parent.mkdir()
+    mesh.write_text("")
+    other.write_text("")
+    shaders = [str(mesh), str(other)]
+    assert slc.find_qualified_shader("mesh.slang", shaders, None) == (str(mesh), "")
+    assert slc.find_qualified_shader("shaders/mesh.slang", shaders, None) == (str(mesh), "")
+    assert slc.find_qualified_shader("./shaders/mesh.slang", shaders, None) == (str(mesh), "")
+    path, err = slc.find_qualified_shader("nope.slang", shaders, None)
+    assert path is None and "not one of the --shader files" in err
+
+
+def test_shaders_defining_ignores_forward_declarations_and_prefixes(tmp_path):
+    a, b, c = tmp_path / "a.slang", tmp_path / "b.slang", tmp_path / "c.slang"
+    a.write_text("struct VertexOutput { float4 p; };")
+    b.write_text("struct VertexOutput;\nstruct VertexOutputEx { float x; };")
+    c.write_text("struct VertexOutput\n{\n float4 p;\n};")
+    assert slc.shaders_defining("VertexOutput", [str(a), str(b), str(c)], {}) == [str(a), str(c)]

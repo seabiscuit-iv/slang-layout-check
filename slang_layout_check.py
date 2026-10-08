@@ -953,6 +953,122 @@ def resolve_slang_structs(slangc, shaders, names, flags, workdir, buffer_kind, i
     return parse_reflection(run.data, remaining), failed, run
 
 
+# A slang_check name may be qualified with the shader that defines it:
+# "shaders/mesh.slang:VertexOutput". The struct name itself may contain "::".
+_QUALIFIED_RE = re.compile(r"^(?P<file>.+?\.(?:slang|slangh|hlsl|hlsli)):(?P<name>[A-Za-z_].*)$", re.IGNORECASE)
+
+
+def split_slang_ref(ref: str) -> Tuple[Optional[str], str]:
+    """Split "path/file.slang:Name" into (path, Name); unqualified names give (None, Name)."""
+    m = _QUALIFIED_RE.match(ref)
+    return (m.group("file"), m.group("name")) if m else (None, ref)
+
+
+def _path_key(path: str) -> str:
+    return os.path.normcase(os.path.normpath(os.path.abspath(path))).replace("\\", "/")
+
+
+def find_qualified_shader(qfile: str, shaders: Sequence[str], header: Optional[str]) -> Tuple[Optional[str], str]:
+    """Map the file part of a qualified name to a shader. Returns (path, "") or (None, reason).
+
+    Matches --shader files whose path ends with qfile (so "shaders/mesh.slang"
+    matches /repo/shaders/mesh.slang); otherwise accepts an existing file
+    relative to the annotated header or the working directory.
+    """
+    rel = os.path.normcase(os.path.normpath(qfile)).replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
+    if os.path.isabs(qfile):
+        matches = [s for s in shaders if _path_key(s) == _path_key(qfile)]
+    else:
+        matches = [s for s in shaders if (_path_key(s) + "/").endswith("/" + rel + "/")]
+    if len(matches) == 1:
+        return matches[0], ""
+    if len(matches) > 1:
+        return None, "refers to '%s', which matches several --shader files (%s); use a longer path" % (
+            qfile, ", ".join(matches))
+    for base in ([os.path.dirname(header)] if header else []) + [os.getcwd()]:
+        cand = os.path.join(base, qfile)
+        if os.path.isfile(cand):
+            return cand, ""
+    return None, "refers to '%s', which is not one of the --shader files and does not exist" % qfile
+
+
+def shaders_defining(name: str, shaders: Sequence[str], cache: Dict[str, str]) -> List[str]:
+    """Shaders whose text contains a definition `struct <name>` (a cheap pre-filter)."""
+    short = name.split("::")[-1]
+    pattern = re.compile(r"\bstruct\s+%s\b(?!\s*;)" % re.escape(short))
+    found = []
+    for s in shaders:
+        if s not in cache:
+            try:
+                with open(s, encoding="utf-8", errors="replace") as fh:
+                    cache[s] = fh.read()
+            except OSError:
+                cache[s] = ""
+        if pattern.search(cache[s]):
+            found.append(s)
+    return found
+
+
+def locate_and_resolve_slang_structs(slangc, shaders, structs, flags, workdir, buffer_kind, import_mode,
+                                     verbose=False):
+    """Find which shader defines each requested struct, then reflect it.
+
+    * "file.slang:Name": only that shader is compiled.
+    * "Name": the shaders are scanned for `struct Name`; one match compiles
+      just that shader, several matches are an error (qualify the name), and
+      no textual match (e.g. a macro-generated struct, or one defined in an
+      #included file) falls back to compiling all shaders together.
+
+    Compiling per shader keeps unrelated shaders out of each other's way: two
+    vertex shaders may both define VertexOutput.
+
+    Returns (layouts by annotation string, failure phrases by annotation
+    string, dependency files reported by slangc).
+    """
+    header_of: Dict[str, str] = {}
+    for cs in structs:
+        header_of.setdefault(cs.slang_name, cs.file)
+    failures: Dict[str, str] = {}
+    groups: Dict[Tuple[str, ...], List[Tuple[str, str]]] = {}
+    text_cache: Dict[str, str] = {}
+    for key in header_of:
+        qfile, name = split_slang_ref(key)
+        if qfile is not None:
+            path, err = find_qualified_shader(qfile, shaders, header_of[key])
+            if path is None:
+                failures[key] = err
+                continue
+            group: Tuple[str, ...] = (path,)
+        else:
+            defs = shaders_defining(name, shaders, text_cache)
+            if len(defs) > 1:
+                failures[key] = "is defined in several shaders (%s); qualify it, e.g. [[slang_check(\"%s:%s\")]]" % (
+                    ", ".join(os.path.basename(d) for d in defs), os.path.basename(defs[0]), name)
+                continue
+            group = (defs[0],) if defs else tuple(shaders)
+        groups.setdefault(group, []).append((key, name))
+
+    layouts: Dict[str, TypeLayout] = {}
+    deps: List[str] = []
+    for group, requests in groups.items():
+        names = list(dict.fromkeys(name for _, name in requests))
+        found, failed, run = resolve_slang_structs(slangc, list(group), names, flags, workdir, buffer_kind,
+                                                   import_mode, verbose)
+        if run is not None:
+            deps += _read_make_depfile(run.depfile)  # read now: the next group reuses workdir
+        searched = ", ".join(os.path.basename(s) for s in group)
+        for key, name in requests:
+            if name in found:
+                layouts[key] = found[name]
+            elif failed.get(name) == "not found":
+                failures[key] = "not found in %s" % searched
+            elif name in failed:
+                failures[key] = "could not be resolved by slangc: %s" % failed[name]
+    return layouts, failures, deps
+
+
 # =============================================================================
 # Slang side: parse_reflection
 # =============================================================================
@@ -1247,13 +1363,12 @@ def check_structs(structs: Sequence[CppStruct], slang_layouts: Dict[str, TypeLay
                 cs.file, cs.line))
         slang = slang_layouts.get(cs.slang_name)
         if cs.slang_name in slang_failures:
+            # Reasons are phrases completing "Slang struct 'X' ...".
             reason = slang_failures[cs.slang_name]
             if reason == "not found":
-                diags.append(Diagnostic("error", "%s: Slang struct '%s' not found in %s"
-                                        % (head, cs.slang_name, shader_list), cs.file, cs.line))
-            else:
-                diags.append(Diagnostic("error", "%s: slangc could not resolve '%s': %s"
-                                        % (head, cs.slang_name, reason), cs.file, cs.line))
+                reason = "not found in %s" % shader_list
+            diags.append(Diagnostic("error", "%s: Slang struct '%s' %s" % (head, cs.slang_name, reason),
+                                    cs.file, cs.line))
         elif slang is not None and cs.layout is not None and not cs.problems:
             # Unsupported constructs were already reported; comparing the
             # remaining fields would only add follow-on noise.
@@ -1517,11 +1632,10 @@ def run(opts) -> int:
             _eprint("%s: slangc: %s (version %s)" % (TOOL, slangc, slangc_version(slangc)))
         workdir = tempfile.mkdtemp(prefix="slang_layout_check_")
         try:
-            names = [cs.slang_name for cs in structs if cs.layout is not None]
-            layouts, failures, srun = resolve_slang_structs(
-                slangc, opts.shaders, names, flags, workdir, opts.slang_buffer, opts.slang_import, opts.verbose)
-            if srun is not None:
-                deps += [d for d in _read_make_depfile(srun.depfile) if "slang_layout_check_" not in d]
+            layouts, failures, slang_deps = locate_and_resolve_slang_structs(
+                slangc, opts.shaders, [cs for cs in structs if cs.layout is not None], flags, workdir,
+                opts.slang_buffer, opts.slang_import, opts.verbose)
+            deps += [d for d in slang_deps if not _norm(d).startswith(_norm(workdir))]
         finally:
             if opts.keep_temp:
                 _eprint("%s: kept temporary files in %s" % (TOOL, workdir))
