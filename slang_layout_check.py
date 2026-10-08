@@ -690,38 +690,70 @@ def _diag_hints(message: str) -> List[str]:
     return hints
 
 
+_ANNOTATION_TEXT_RE = re.compile(r"\b(?:slang_check|SLANG_STRUCT)\s*\(")
+_HEADER_EXTS = (".h", ".hh", ".hpp", ".hxx", ".h++", ".inl", ".ipp", ".tpp", ".cuh")
+
+
+def files_with_annotations(paths: Sequence[str]) -> List[str]:
+    hits = []
+    for p in paths:
+        try:
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        if _ANNOTATION_TEXT_RE.search(text):
+            hits.append(p)
+    return hits
+
+
+def _parse_tu(ci, path: str, clang_args: Sequence[str], content: Optional[str]):
+    unsaved = [(path, content)] if content is not None else None
+    try:
+        return ci.Index.create().parse(path, args=list(clang_args), unsaved_files=unsaved,
+                                       options=ci.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES)
+    except ci.TranslationUnitLoadError as e:
+        raise ToolError("libclang failed to parse %s (%s). Arguments: %s" % (path, e, " ".join(clang_args)))
+
+
 def parse_cpp(ci, headers: Sequence[str], clang_args: Sequence[str], ignore_system_errors: bool = False):
-    """Parse headers with libclang and collect every annotated struct.
+    """Parse C++ files with libclang and collect every annotated struct.
+
+    Headers share one generated translation unit; every source file (.cpp, ...)
+    is its own translation unit, since sources would redefine each other.
 
     Returns (structs, warning diagnostics, list of all included files).
     Raises CppParseError if libclang reported errors.
     """
-    tu_name = os.path.join(tempfile.gettempdir(), "__slang_layout_check_tu.cpp")
-    content = "".join('#include "%s"\n' % os.path.abspath(h).replace("\\", "/") for h in headers)
-    try:
-        tu = ci.Index.create().parse(
-            tu_name,
-            args=list(clang_args),
-            unsaved_files=[(tu_name, content)],
-            options=ci.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
-        )
-    except ci.TranslationUnitLoadError as e:
-        raise ToolError("libclang failed to parse the headers (%s). Arguments: %s" % (e, " ".join(clang_args)))
+    hdrs = [h for h in headers if h.lower().endswith(_HEADER_EXTS)]
+    sources = [h for h in headers if not h.lower().endswith(_HEADER_EXTS)]
+    tus = []
+    if hdrs:
+        tu_name = os.path.join(tempfile.gettempdir(), "__slang_layout_check_tu.cpp")
+        content = "".join('#include "%s"\n' % os.path.abspath(h).replace("\\", "/") for h in hdrs)
+        tus.append(_parse_tu(ci, tu_name, clang_args, content))
+    for src in sources:
+        tus.append(_parse_tu(ci, os.path.abspath(src), clang_args, None))
 
     errors: List[Diagnostic] = []
     warnings: List[Diagnostic] = []
-    for d in tu.diagnostics:
-        file, line, msg = _format_clang_diag(d)
-        system = d.location.file is not None and _in_system_header(d.location)
-        if d.severity >= ci.Diagnostic.Error:
-            if system and ignore_system_errors and d.severity < ci.Diagnostic.Fatal:
+    reported = set()
+    for tu in tus:
+        for d in tu.diagnostics:
+            file, line, msg = _format_clang_diag(d)
+            if (file, line, msg) in reported:  # a header shared by several TUs
                 continue
-            errors.append(Diagnostic("fatal error" if d.severity >= ci.Diagnostic.Fatal else "error", msg, file, line))
-            for h in _diag_hints(msg):
-                errors.append(Diagnostic("note", h, file, line))
-        elif "unknown attribute 'slang_check'" in msg:
-            errors.append(Diagnostic("error", msg + " (this struct would not be checked)", file, line))
-            errors.append(Diagnostic("note", "add #include <slang_check.h> to this header", file, line))
+            reported.add((file, line, msg))
+            system = d.location.file is not None and _in_system_header(d.location)
+            if d.severity >= ci.Diagnostic.Error:
+                if system and ignore_system_errors and d.severity < ci.Diagnostic.Fatal:
+                    continue
+                errors.append(Diagnostic("fatal error" if d.severity >= ci.Diagnostic.Fatal else "error", msg, file, line))
+                for h in _diag_hints(msg):
+                    errors.append(Diagnostic("note", h, file, line))
+            elif "unknown attribute 'slang_check'" in msg:
+                errors.append(Diagnostic("error", msg + " (this struct would not be checked)", file, line))
+                errors.append(Diagnostic("note", "add #include <slang_check.h> to this header", file, line))
     if errors:
         raise CppParseError(errors)
 
@@ -739,17 +771,18 @@ def parse_cpp(ci, headers: Sequence[str], clang_args: Sequence[str], ignore_syst
             if c.kind in records and c.is_definition():
                 anns = [a.spelling for a in c.get_children()
                         if a.kind == CK.ANNOTATE_ATTR and a.spelling.startswith(ANNOTATION_PREFIX)]
-                key = (_cursor_file(c), c.location.line, c.location.column)
+                key = (_norm(_cursor_file(c)), c.location.line, c.location.column)
                 if anns and key not in seen:
                     seen.add(key)
                     structs.append(_collect_struct(ci, c, anns))
             if c.kind in containers:
                 walk(c)
 
-    walk(tu.cursor)
-    included = sorted({os.path.normpath(inc.include.name) for inc in tu.get_includes()} |
-                      {os.path.normpath(os.path.abspath(h)) for h in headers})
-    return structs, warnings, included
+    included = {os.path.normpath(os.path.abspath(h)) for h in headers}
+    for tu in tus:
+        walk(tu.cursor)
+        included |= {os.path.normpath(inc.include.name) for inc in tu.get_includes()}
+    return structs, warnings, sorted(included)
 
 
 # =============================================================================
@@ -1033,6 +1066,7 @@ def locate_and_resolve_slang_structs(slangc, shaders, structs, flags, workdir, b
     failures: Dict[str, str] = {}
     groups: Dict[Tuple[str, ...], List[Tuple[str, str]]] = {}
     text_cache: Dict[str, str] = {}
+    narrowed: List[Tuple[str, str]] = []
     for key in header_of:
         qfile, name = split_slang_ref(key)
         if qfile is not None:
@@ -1048,24 +1082,36 @@ def locate_and_resolve_slang_structs(slangc, shaders, structs, flags, workdir, b
                     ", ".join(os.path.basename(d) for d in defs), os.path.basename(defs[0]), name)
                 continue
             group = (defs[0],) if defs else tuple(shaders)
+            if defs and len(shaders) > 1:
+                narrowed.append((key, name))
         groups.setdefault(group, []).append((key, name))
 
     layouts: Dict[str, TypeLayout] = {}
     deps: List[str] = []
-    for group, requests in groups.items():
-        names = list(dict.fromkeys(name for _, name in requests))
-        found, failed, run = resolve_slang_structs(slangc, list(group), names, flags, workdir, buffer_kind,
-                                                   import_mode, verbose)
-        if run is not None:
-            deps += _read_make_depfile(run.depfile)  # read now: the next group reuses workdir
-        searched = ", ".join(os.path.basename(s) for s in group)
-        for key, name in requests:
-            if name in found:
-                layouts[key] = found[name]
-            elif failed.get(name) == "not found":
-                failures[key] = "not found in %s" % searched
-            elif name in failed:
-                failures[key] = "could not be resolved by slangc: %s" % failed[name]
+
+    def resolve_groups(todo: Dict[Tuple[str, ...], List[Tuple[str, str]]]):
+        for group, requests in todo.items():
+            names = list(dict.fromkeys(name for _, name in requests))
+            found, failed, run = resolve_slang_structs(slangc, list(group), names, flags, workdir, buffer_kind,
+                                                       import_mode, verbose)
+            if run is not None:
+                deps.extend(_read_make_depfile(run.depfile))  # read now: the next group reuses workdir
+            searched = ", ".join(os.path.basename(s) for s in group)
+            for key, name in requests:
+                if name in found:
+                    layouts[key] = found[name]
+                    failures.pop(key, None)
+                elif failed.get(name) == "not found":
+                    failures[key] = "not found in %s" % searched
+                elif name in failed:
+                    failures[key] = "could not be resolved by slangc: %s" % failed[name]
+
+    resolve_groups(groups)
+    # A text match can be wrong (commented out, #ifdef'd away) while the struct is
+    # still reachable through another shader, so retry those against all shaders.
+    retry = [(key, name) for key, name in narrowed if failures.get(key, "").startswith("not found")]
+    if retry:
+        resolve_groups({tuple(shaders): retry})
     return layouts, failures, deps
 
 
@@ -1523,6 +1569,7 @@ def _split_flag_args(argv: Sequence[str]) -> List[str]:
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="slang_layout_check.py",
+        fromfile_prefix_chars="@",  # @file: one argument per line (CMake passes long file lists this way)
         description="Verify that [[slang_check(\"Name\")]] C++ structs match their Slang structs byte for byte.",
         epilog="Exit codes: 0 = layouts match, 1 = mismatch, 2 = tool or usage error.",
     )
@@ -1595,9 +1642,14 @@ def run(opts) -> int:
         if not os.path.isfile(s):
             raise ToolError("shader not found: %s" % s)
 
-    ci = load_cindex(opts.libclang)
-    lc_text, lc_major = libclang_version(ci)
-    cfg = build_clang_args(opts, ci, lc_major)
+    # Text pre-filter: whole-codebase file lists only pay for files that use the annotation.
+    annotated = files_with_annotations(opts.headers)
+    if opts.verbose:
+        _eprint("%s: %d of %d C++ file(s) mention slang_check" % (TOOL, len(annotated), len(opts.headers)))
+
+    ci = load_cindex(opts.libclang) if annotated else None
+    lc_text, lc_major = libclang_version(ci) if ci else ("not loaded", None)
+    cfg = build_clang_args(opts, ci, lc_major) if ci else CxxConfig([], None, False, "n/a")
     for w in cfg.warnings:
         _eprint("%s: warning: %s" % (TOOL, w))
     if opts.verbose:
@@ -1607,7 +1659,7 @@ def run(opts) -> int:
         _eprint("%s: clang args: %s" % (TOOL, " ".join(cfg.args)))
 
     try:
-        structs, _, cpp_deps = parse_cpp(ci, opts.headers, cfg.args, opts.ignore_system_errors)
+        structs, _, cpp_deps = parse_cpp(ci, annotated, cfg.args, opts.ignore_system_errors) if ci else ([], [], [])
     except CppParseError as e:
         e.diagnostics += [Diagnostic("note", h) for h in cfg.hints]
         e.diagnostics.append(Diagnostic("note", "C++ target: %s; builtin headers: %s; rerun with -v for the full "
@@ -1615,11 +1667,11 @@ def run(opts) -> int:
                                                                            cfg.builtin_headers)))
         raise
     global_diags: List[Diagnostic] = []
-    deps = list(cpp_deps) + [os.path.abspath(s) for s in opts.shaders]
+    deps = list(cpp_deps) + [os.path.abspath(h) for h in opts.headers] + [os.path.abspath(s) for s in opts.shaders]
 
     if not structs:
         global_diags.append(Diagnostic(
-            "warning", "no structs annotated with [[slang_check(\"...\")]] found in: %s" % ", ".join(opts.headers)))
+            "warning", "no structs annotated with [[slang_check(\"...\")]] found in %d C++ file(s)" % len(opts.headers)))
         results: List[StructResult] = []
     else:
         if not opts.shaders:

@@ -329,9 +329,15 @@ function(slang_layout_check target)
 
   # $<SEMICOLON> (not a literal ';') so the genex survives being stored in a
   # CMake list; COMMAND_EXPAND_LISTS splits the evaluated result into args.
+  # File lists can be a whole codebase: pass them in a response file (one
+  # argument per line) to stay under command-line length limits.
+  set(_rsp "${_work}/${_check}.files")
+  list(JOIN _headers "\n" _hdr_lines)
+  list(JOIN _shaders "\n" _shd_lines)
+  file(WRITE "${_rsp}" "--header\n${_hdr_lines}\n--shader\n${_shd_lines}\n")
+
   set(_args
-    --header ${_headers}
-    --shader ${_shaders}
+    "@${_rsp}"
     "$<$<BOOL:${_inc}>:-I$<JOIN:${_inc},$<SEMICOLON>-I>>"
     "$<$<BOOL:${_def}>:-D$<JOIN:${_def},$<SEMICOLON>-D>>"
     "--std=${_std}"
