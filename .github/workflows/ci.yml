@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Keep in sync with TESTED_* in slang_layout_check.py and cmake/SlangLayoutCheck.cmake.
+  SLANG_VERSION: "2026.8"
+  LIBCLANG_VERSION: "18.1.1"
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, python: "3.12" }   # clang-18 preinstalled -> matching resource dir
+          - { os: ubuntu-22.04, python: "3.8" }    # no clang-18 -> GCC include-dir fallback, oldest Python
+          - { os: windows-latest, python: "3.12" } # MSVC ABI
+          - { os: macos-latest, python: "3.12" }   # Apple clang, -isysroot from xcrun
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install Python dependencies
+        run: python -m pip install "libclang==${{ env.LIBCLANG_VERSION }}" pytest
+
+      - name: Install slangc ${{ env.SLANG_VERSION }}
+        shell: bash
+        run: |
+          case "${{ runner.os }}-${{ runner.arch }}" in
+            Linux-X64)   f="slang-$SLANG_VERSION-linux-x86_64-glibc-2.27.zip";  sha=df1caf7ba7f3f435a17d82a7919839b054b1ce87c83a90fe62e3962c5cfb73c4 ;;
+            Linux-ARM64) f="slang-$SLANG_VERSION-linux-aarch64-glibc-2.28.zip"; sha=daeb9528191834457e4e38cdd4b4aed2688924a0994c71e6860b375a8b83dfc7 ;;
+            Windows-X64) f="slang-$SLANG_VERSION-windows-x86_64.zip";           sha=7a3ffcbd267dbddb4818f68ade13da37e2d394dd305c7276fef964933388f184 ;;
+            macOS-ARM64) f="slang-$SLANG_VERSION-macos-aarch64.zip";            sha=e182d44b403f3e5d78d66e7608cf6db1b81119883426fa9cc30f6af70c7ed554 ;;
+            macOS-X64)   f="slang-$SLANG_VERSION-macos-x86_64.zip";             sha=b2ae6d712134c7d1c841261f1606f51fa3474895598672887a1a951a58759245 ;;
+            *) echo "no Slang build for ${{ runner.os }}-${{ runner.arch }}"; exit 1 ;;
+          esac
+          curl -fsSL -o "$RUNNER_TEMP/slang.zip" "https://github.com/shader-slang/slang/releases/download/v$SLANG_VERSION/$f"
+          python -c "import hashlib,sys; h=hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest(); assert h==sys.argv[2], h" "$RUNNER_TEMP/slang.zip" "$sha"
+          mkdir -p "$RUNNER_TEMP/slang"
+          unzip -q "$RUNNER_TEMP/slang.zip" -d "$RUNNER_TEMP/slang"
+          echo "$RUNNER_TEMP/slang/bin" >> "$GITHUB_PATH"
+
+      - name: Tool versions
+        shell: bash
+        run: |
+          slangc -v
+          python slang_layout_check.py --version
+          which clang-18 && clang-18 --version || echo "no clang-18 on this runner"
+
+      - name: pytest
+        run: python -m pytest -v tests
+
+      - name: Run checker on examples (verbose)
+        shell: bash
+        run: |
+          python slang_layout_check.py -v --header examples/pass/gpu_types.h --shader examples/pass/particles.slang \
+            --slang-flag -target --slang-flag spirv
+          set +e
+          python slang_layout_check.py --header examples/fail/gpu_types.h --shader examples/fail/particles.slang \
+            --slang-flag -target --slang-flag spirv
+          test $? -eq 1
+
+  cmake-e2e:
+    name: CMake end-to-end (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # No slangc is installed here on purpose: this exercises the pinned,
+      # hash-checked download (SLANG_LAYOUT_CHECK_DOWNLOAD_SLANG) and the
+      # private venv + `pip install libclang` path of the CMake module.
+      - name: Configure examples/pass
+        run: cmake -S examples/pass -B build/pass -DSLANG_LAYOUT_CHECK_DOWNLOAD_SLANG=ON
+
+      - name: Build examples/pass (must succeed)
+        run: cmake --build build/pass --config Debug
+
+      - name: Rebuild is a no-op for the check
+        shell: bash
+        run: |
+          cmake --build build/pass --config Debug 2>&1 | tee rebuild.log
+          if grep -q "Checking C++/Slang struct layouts" rebuild.log; then
+            echo "layout check re-ran without any input change"; exit 1
+          fi
+
+      - name: Configure examples/fail
+        run: cmake -S examples/fail -B build/fail -DSLANG_LAYOUT_CHECK_DOWNLOAD_SLANG=ON
+
+      - name: Build examples/fail (must fail with layout errors)
+        shell: bash
+        run: |
+          set +e
+          cmake --build build/fail --config Debug > fail.log 2>&1
+          status=$?
+          cat fail.log
+          set -e
+          test $status -ne 0 || { echo "build unexpectedly succeeded"; exit 1; }
+          for msg in \
+            "SpotLight vs SpotLight: field 'direction' offset mismatch (cpp=4, slang=16)" \
+            "Material vs Material: field 'metallic' size mismatch (cpp=1, slang=4)" \
+            "Sphere vs Sphere: size mismatch (cpp=28, slang=32)" \
+            "Particle vs Particle: field order differs (cpp: mass, id; slang: id, mass)"; do
+            grep -qF "$msg" fail.log || { echo "missing expected error: $msg"; exit 1; }
+          done

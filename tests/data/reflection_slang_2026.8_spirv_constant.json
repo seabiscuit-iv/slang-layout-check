@@ -1,0 +1,485 @@
+{
+    "parameters": [
+        {
+            "name": "__slc_buf_0",
+            "binding": {"kind": "descriptorTableSlot", "index": 0},
+            "type": {
+                "kind": "constantBuffer",
+                "elementType": {
+                    "kind": "struct",
+                    "name": "__slc_wrap_0",
+                    "fields": [
+                        {
+                            "name": "v",
+                            "type": {
+                                "kind": "array",
+                                "elementCount": 2,
+                                "elementType": {
+                                    "kind": "struct",
+                                    "name": "SpotLight",
+                                    "fields": [
+                                        {
+                                            "name": "intensity",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 0, "size": 4, "elementStride": 0}
+                                        },
+                                        {
+                                            "name": "direction",
+                                            "type": {
+                                                "kind": "vector",
+                                                "elementCount": 3,
+                                                "elementType": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                }
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 16, "size": 12, "elementStride": 4}
+                                        },
+                                        {
+                                            "name": "range",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 28, "size": 4, "elementStride": 0}
+                                        }
+                                    ]
+                                },
+                                "uniformStride": 32
+                            },
+                            "binding": {"kind": "uniform", "offset": 0, "size": 64, "elementStride": 32}
+                        }
+                    ]
+                },
+                "containerVarLayout": {
+                    "binding": {"kind": "descriptorTableSlot", "index": 0}
+                },
+                "elementVarLayout": {
+                    "type": {
+                        "kind": "struct",
+                        "name": "__slc_wrap_0",
+                        "fields": [
+                            {
+                                "name": "v",
+                                "type": {
+                                    "kind": "array",
+                                    "elementCount": 2,
+                                    "elementType": {
+                                        "kind": "struct",
+                                        "name": "SpotLight",
+                                        "fields": [
+                                            {
+                                                "name": "intensity",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 0, "size": 4, "elementStride": 0}
+                                            },
+                                            {
+                                                "name": "direction",
+                                                "type": {
+                                                    "kind": "vector",
+                                                    "elementCount": 3,
+                                                    "elementType": {
+                                                        "kind": "scalar",
+                                                        "scalarType": "float32"
+                                                    }
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 16, "size": 12, "elementStride": 4}
+                                            },
+                                            {
+                                                "name": "range",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 28, "size": 4, "elementStride": 0}
+                                            }
+                                        ]
+                                    },
+                                    "uniformStride": 32
+                                },
+                                "binding": {"kind": "uniform", "offset": 0, "size": 64, "elementStride": 32}
+                            }
+                        ]
+                    },
+                    "binding": {"kind": "uniform", "offset": 0, "size": 64, "elementStride": 0}
+                }
+            }
+        },
+        {
+            "name": "__slc_buf_1",
+            "binding": {"kind": "descriptorTableSlot", "index": 1},
+            "type": {
+                "kind": "constantBuffer",
+                "elementType": {
+                    "kind": "struct",
+                    "name": "__slc_wrap_1",
+                    "fields": [
+                        {
+                            "name": "v",
+                            "type": {
+                                "kind": "array",
+                                "elementCount": 2,
+                                "elementType": {
+                                    "kind": "struct",
+                                    "name": "Material",
+                                    "fields": [
+                                        {
+                                            "name": "roughness",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 0, "size": 4, "elementStride": 0}
+                                        },
+                                        {
+                                            "name": "metallic",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "uint32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 4, "size": 4, "elementStride": 0}
+                                        },
+                                        {
+                                            "name": "opacity",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 8, "size": 4, "elementStride": 0}
+                                        }
+                                    ]
+                                },
+                                "uniformStride": 16
+                            },
+                            "binding": {"kind": "uniform", "offset": 0, "size": 32, "elementStride": 16}
+                        }
+                    ]
+                },
+                "containerVarLayout": {
+                    "binding": {"kind": "descriptorTableSlot", "index": 0}
+                },
+                "elementVarLayout": {
+                    "type": {
+                        "kind": "struct",
+                        "name": "__slc_wrap_1",
+                        "fields": [
+                            {
+                                "name": "v",
+                                "type": {
+                                    "kind": "array",
+                                    "elementCount": 2,
+                                    "elementType": {
+                                        "kind": "struct",
+                                        "name": "Material",
+                                        "fields": [
+                                            {
+                                                "name": "roughness",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 0, "size": 4, "elementStride": 0}
+                                            },
+                                            {
+                                                "name": "metallic",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "uint32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 4, "size": 4, "elementStride": 0}
+                                            },
+                                            {
+                                                "name": "opacity",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 8, "size": 4, "elementStride": 0}
+                                            }
+                                        ]
+                                    },
+                                    "uniformStride": 16
+                                },
+                                "binding": {"kind": "uniform", "offset": 0, "size": 32, "elementStride": 16}
+                            }
+                        ]
+                    },
+                    "binding": {"kind": "uniform", "offset": 0, "size": 32, "elementStride": 0}
+                }
+            }
+        },
+        {
+            "name": "__slc_buf_2",
+            "binding": {"kind": "descriptorTableSlot", "index": 2},
+            "type": {
+                "kind": "constantBuffer",
+                "elementType": {
+                    "kind": "struct",
+                    "name": "__slc_wrap_2",
+                    "fields": [
+                        {
+                            "name": "v",
+                            "type": {
+                                "kind": "array",
+                                "elementCount": 2,
+                                "elementType": {
+                                    "kind": "struct",
+                                    "name": "Sphere",
+                                    "fields": [
+                                        {
+                                            "name": "center",
+                                            "type": {
+                                                "kind": "vector",
+                                                "elementCount": 3,
+                                                "elementType": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                }
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 0, "size": 12, "elementStride": 4}
+                                        },
+                                        {
+                                            "name": "radius",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 12, "size": 4, "elementStride": 0}
+                                        },
+                                        {
+                                            "name": "color",
+                                            "type": {
+                                                "kind": "vector",
+                                                "elementCount": 3,
+                                                "elementType": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                }
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 16, "size": 12, "elementStride": 4}
+                                        }
+                                    ]
+                                },
+                                "uniformStride": 32
+                            },
+                            "binding": {"kind": "uniform", "offset": 0, "size": 64, "elementStride": 32}
+                        }
+                    ]
+                },
+                "containerVarLayout": {
+                    "binding": {"kind": "descriptorTableSlot", "index": 0}
+                },
+                "elementVarLayout": {
+                    "type": {
+                        "kind": "struct",
+                        "name": "__slc_wrap_2",
+                        "fields": [
+                            {
+                                "name": "v",
+                                "type": {
+                                    "kind": "array",
+                                    "elementCount": 2,
+                                    "elementType": {
+                                        "kind": "struct",
+                                        "name": "Sphere",
+                                        "fields": [
+                                            {
+                                                "name": "center",
+                                                "type": {
+                                                    "kind": "vector",
+                                                    "elementCount": 3,
+                                                    "elementType": {
+                                                        "kind": "scalar",
+                                                        "scalarType": "float32"
+                                                    }
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 0, "size": 12, "elementStride": 4}
+                                            },
+                                            {
+                                                "name": "radius",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 12, "size": 4, "elementStride": 0}
+                                            },
+                                            {
+                                                "name": "color",
+                                                "type": {
+                                                    "kind": "vector",
+                                                    "elementCount": 3,
+                                                    "elementType": {
+                                                        "kind": "scalar",
+                                                        "scalarType": "float32"
+                                                    }
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 16, "size": 12, "elementStride": 4}
+                                            }
+                                        ]
+                                    },
+                                    "uniformStride": 32
+                                },
+                                "binding": {"kind": "uniform", "offset": 0, "size": 64, "elementStride": 32}
+                            }
+                        ]
+                    },
+                    "binding": {"kind": "uniform", "offset": 0, "size": 64, "elementStride": 0}
+                }
+            }
+        },
+        {
+            "name": "__slc_buf_3",
+            "binding": {"kind": "descriptorTableSlot", "index": 3},
+            "type": {
+                "kind": "constantBuffer",
+                "elementType": {
+                    "kind": "struct",
+                    "name": "__slc_wrap_3",
+                    "fields": [
+                        {
+                            "name": "v",
+                            "type": {
+                                "kind": "array",
+                                "elementCount": 2,
+                                "elementType": {
+                                    "kind": "struct",
+                                    "name": "Particle",
+                                    "fields": [
+                                        {
+                                            "name": "id",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "uint32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 0, "size": 4, "elementStride": 0}
+                                        },
+                                        {
+                                            "name": "mass",
+                                            "type": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 4, "size": 4, "elementStride": 0}
+                                        }
+                                    ]
+                                },
+                                "uniformStride": 16
+                            },
+                            "binding": {"kind": "uniform", "offset": 0, "size": 32, "elementStride": 16}
+                        }
+                    ]
+                },
+                "containerVarLayout": {
+                    "binding": {"kind": "descriptorTableSlot", "index": 0}
+                },
+                "elementVarLayout": {
+                    "type": {
+                        "kind": "struct",
+                        "name": "__slc_wrap_3",
+                        "fields": [
+                            {
+                                "name": "v",
+                                "type": {
+                                    "kind": "array",
+                                    "elementCount": 2,
+                                    "elementType": {
+                                        "kind": "struct",
+                                        "name": "Particle",
+                                        "fields": [
+                                            {
+                                                "name": "id",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "uint32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 0, "size": 4, "elementStride": 0}
+                                            },
+                                            {
+                                                "name": "mass",
+                                                "type": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                },
+                                                "binding": {"kind": "uniform", "offset": 4, "size": 4, "elementStride": 0}
+                                            }
+                                        ]
+                                    },
+                                    "uniformStride": 16
+                                },
+                                "binding": {"kind": "uniform", "offset": 0, "size": 32, "elementStride": 16}
+                            }
+                        ]
+                    },
+                    "binding": {"kind": "uniform", "offset": 0, "size": 32, "elementStride": 0}
+                }
+            }
+        },
+        {
+            "name": "particles",
+            "binding": {"kind": "descriptorTableSlot", "index": 4},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "struct",
+                    "name": "Particle",
+                    "fields": [
+                        {
+                            "name": "id",
+                            "type": {
+                                "kind": "scalar",
+                                "scalarType": "uint32"
+                            },
+                            "binding": {"kind": "uniform", "offset": 0, "size": 4, "elementStride": 0}
+                        },
+                        {
+                            "name": "mass",
+                            "type": {
+                                "kind": "scalar",
+                                "scalarType": "float32"
+                            },
+                            "binding": {"kind": "uniform", "offset": 4, "size": 4, "elementStride": 0}
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "entryPoints": [
+        {
+            "name": "__slc_entry",
+            "stage": "compute",
+            "threadGroupSize": [1, 1, 1],
+            "bindings": [
+                {
+                    "name": "__slc_buf_0",
+                    "binding": {"kind": "descriptorTableSlot", "index": 0, "used": 0}
+                },
+                {
+                    "name": "__slc_buf_1",
+                    "binding": {"kind": "descriptorTableSlot", "index": 1, "used": 0}
+                },
+                {
+                    "name": "__slc_buf_2",
+                    "binding": {"kind": "descriptorTableSlot", "index": 2, "used": 0}
+                },
+                {
+                    "name": "__slc_buf_3",
+                    "binding": {"kind": "descriptorTableSlot", "index": 3, "used": 0}
+                },
+                {
+                    "name": "particles",
+                    "binding": {"kind": "descriptorTableSlot", "index": 4, "used": 0}
+                }
+            ]
+        }
+    ],
+    "bindlessSpaceIndex": 1
+}
