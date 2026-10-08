@@ -1366,6 +1366,7 @@ def _read_make_depfile(path: Optional[str]) -> List[str]:
 
 def write_depfile(path: str, target: str, deps: Iterable[str]):
     uniq = list(dict.fromkeys(os.path.normpath(os.path.abspath(d)) for d in deps if d))
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(_make_escape(os.path.abspath(target)) + ":")
         for d in uniq:

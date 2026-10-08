@@ -309,6 +309,7 @@ function(slang_layout_check target)
     set(_check "${target}_slang_layout_check")
   endif()
   set(_work "${CMAKE_CURRENT_BINARY_DIR}/slang_layout_check")
+  file(MAKE_DIRECTORY "${_work}")  # Makefile generators don't create it for the depfile
   set(_stamp "${_work}/${_check}.stamp")
   set(_depfile "${_work}/${_check}.d")
 
