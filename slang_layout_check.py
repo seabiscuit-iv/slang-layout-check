@@ -919,6 +919,14 @@ def resolve_slang_structs(slangc, shaders, names, flags, workdir, buffer_kind, i
             sys.stderr.write("%s: slangc: %s\n" % (TOOL, " ".join(run.cmd)))
         if run.data is not None:
             break
+        if import_mode == "import" and "declaration not accessible" in run.log:
+            # Files with a `module X;` declaration keep non-`public` structs
+            # internal to the module, so an importing wrapper cannot name them.
+            # #include-ing the files instead makes them part of the wrapper.
+            if verbose:
+                sys.stderr.write("%s: non-public Slang declarations; retrying with #include\n" % TOOL)
+            import_mode = "include"
+            continue
         undefined = set(_UNDEFINED_RE.findall(run.log))
         hit = [n for n in remaining if n in undefined or n.split("::")[-1] in undefined]
         if hit:
