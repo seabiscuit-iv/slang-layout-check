@@ -100,8 +100,12 @@ def test_read_slangc_depfile(tmp_path):
 
 def test_depfile_roundtrip(tmp_path):
     p = tmp_path / "x.d"
+    (tmp_path / "with space").mkdir()
     deps = [str(tmp_path / "with space" / "a.h"), str(tmp_path / "b.slang")]
-    slc.write_depfile(str(p), str(tmp_path / "stamp"), deps)
+    for d in deps:
+        open(d, "w").close()
+    # Missing files are dropped: Make would treat them as always out of date.
+    slc.write_depfile(str(p), str(tmp_path / "stamp"), deps + [str(tmp_path / "virtual.slang")])
     read = [os.path.normcase(os.path.normpath(d)) for d in slc._read_make_depfile(str(p))]
     assert read == [os.path.normcase(os.path.normpath(d)) for d in deps]
 

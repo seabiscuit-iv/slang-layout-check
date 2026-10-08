@@ -1365,7 +1365,10 @@ def _read_make_depfile(path: Optional[str]) -> List[str]:
 
 
 def write_depfile(path: str, target: str, deps: Iterable[str]):
-    uniq = list(dict.fromkeys(os.path.normpath(os.path.abspath(d)) for d in deps if d))
+    # Only list files that exist: Makefile generators turn every dependency into
+    # an empty rule, so a missing one (e.g. a virtual path from slangc) would be
+    # "always out of date" and re-run the check on every build.
+    uniq = list(dict.fromkeys(os.path.normpath(os.path.abspath(d)) for d in deps if d and os.path.isfile(d)))
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(_make_escape(os.path.abspath(target)) + ":")
